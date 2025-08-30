@@ -1,0 +1,39 @@
+# .ollama.yaml
+# FusionFlow — Model Switcher for 16GB MacBook
+
+profiles:
+  dsl:
+    model: deepseek-coder:6.7b-base-q4_0
+    temperature: 0.2
+    context_length: 4096
+    notes: >
+      Use for flow DSL engine, transformations, schema evolution,
+      and runtime orchestration. Optimized for local hardware.
+
+  connectors:
+    model: qqwen:7b-q4_0
+    temperature: 0.25
+    context_length: 4096
+    notes: >
+      Use for developing source/target connectors, protocol adapters,
+      and payload playground modules.
+
+  ui:
+    model: codellama:7b-code-q4_0
+    temperature: 0.3
+    context_length: 4096
+    notes: >
+      Use for FusionFlow's flow builder, dashboards, and pro-code editor integration.
+
+  infra:
+    model: mistral:7b-instruct-v0.3-q4_0
+    temperature: 0.25
+    context_length: 4096
+    notes: >
+      Use for infra-as-code (Kubernetes, GitOps YAML, Terraform),
+      CI/CD pipelines, and observability wiring.
+
+defaults:
+  profile: connectors
+  format: markdown
+  max_output_tokens: 1024

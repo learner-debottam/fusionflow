@@ -10,6 +10,23 @@ project:
   architecture: "Event-driven microservices with CQRS pattern"
   compliance: "SOC2, GDPR, HIPAA ready"
 
+rules:
+  - rule: "Always respect `.ollama.yaml` profiles when suggesting or generating code."
+  - rule: "Use payload-agnostic design across all connectors."
+  - rule: "Follow GitOps principles for CI/CD and deployments."
+  - rule: "Enforce security-first coding (mTLS, Vault, OPA, RBAC)."
+  - rule: "Ensure observability with OpenTelemetry in every flow."
+  - rule: "Prefer stateless microservice design for scaling."
+  - rule: "Keep UI accessible, low-code + pro-code friendly."
+  - rule: "Always produce code in TypeScript (frontend/backend) or Go (engine/runtime)."
+  - rule: "Respect MacBook-friendly `.ollama.yaml` profiles (≤7B quantized models)."
+
+ollama_profiles:
+  dsl: deepseek-coder:6.7b-base-q4_0
+  connectors: qwen:7b-q4_0
+  ui: codellama:7b-code-q4_0
+  infra: mistral:7b-instruct-v0.3-q4_0
+
 workflow:
   - rule: "Always propose small, PR-sized changes (≤400 LOC)."
   - rule: "For each output include: file paths, exact code blocks, and explanation of how it meets PRD."
@@ -361,3 +378,50 @@ prompts:
       - Implement validation error handling
       - Include validation testing
       - Add validation performance monitoring
+
+special_prompts:
+  - name: "Add New Connector"
+    description: "Generate a new source/target connector (REST, Kafka, DB, etc.)."
+    model_profile: connectors
+    steps:
+      - "Scaffold connector boilerplate."
+      - "Implement init(), connect(), consume(), produce()."
+      - "Add unit tests with mock payloads."
+      - "Register in connector marketplace config."
+
+  - name: "Implement JSONata Step"
+    description: "Add a transformation step using JSONata for payload mapping."
+    model_profile: dsl
+    steps:
+      - "Insert JSONata expression with schema inference."
+      - "Generate example input/output mappings."
+      - "Add validation tests."
+
+  - name: "Build UI Flow Node"
+    description: "Create a new visual node in React/D3 for the flow builder."
+    model_profile: ui
+    steps:
+      - "Add node type definition in DAG."
+      - "Render node with inputs/outputs."
+      - "Link to pro-code editor (Monaco)."
+      - "Add drag/drop interactions."
+
+  - name: "Setup Infra Module"
+    description: "Generate infra-as-code for Kubernetes/GitOps."
+    model_profile: infra
+    steps:
+      - "Add Helm chart or Terraform module."
+      - "Configure service mesh and secrets (Vault)."
+      - "Enable tracing (OpenTelemetry)."
+
+workflow_prompts:
+  - name: "Create ADR"
+    description: "Scaffold an Architecture Decision Record in /docs/adr."
+    model_profile: infra
+  - name: "Open PR"
+    description: "Prepare PR body with linked issues, checklist, and changelog entry."
+    model_profile: connectors
+  - name: "Refactor Safely"
+    description: "Refactor code with tests, linting, and schema evolution checks."
+    model_profile: dsl
+
