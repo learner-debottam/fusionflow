@@ -1,0 +1,39 @@
+{
+  "name": "@fusionflow/connector-sdk",
+  "version": "0.1.0",
+  "description": "SDK for building FusionFlow connectors",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@fusionflow/common": "workspace:*",
+    "axios": "^1.6.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "eslint": "^8.53.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.0.3",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.2.2"
+  },
+  "keywords": [
+    "fusionflow",
+    "connector",
+    "sdk",
+    "integration",
+    "middleware"
+  ],
+  "author": "FusionFlow Team",
+  "license": "MIT"
+}

@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@fusionflow/common": ["packages/common/src"],
+      "@fusionflow/connector-sdk": ["packages/connector-sdk/src"],
+      "@fusionflow/flow-dsl": ["packages/flow-dsl/src"],
+      "@fusionflow/otlp": ["packages/otlp/src"]
+    }
+  },
+  "references": [
+    { "path": "packages/common" },
+    { "path": "packages/connector-sdk" },
+    { "path": "packages/flow-dsl" },
+    { "path": "apps/api" },
+    { "path": "apps/ui" }
+  ],
+  "include": [
+    "packages/*/src/**/*",
+    "apps/*/src/**/*",
+    "packages/*/test/**/*",
+    "apps/*/test/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "coverage"
+  ]
+} 

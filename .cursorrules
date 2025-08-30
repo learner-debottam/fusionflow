@@ -1,0 +1,363 @@
+# .cursorrules
+# FusionFlow — Cursor Project Rules
+# Enforces standards, security, workflows, and provides reusable prompts.
+
+project:
+  name: FusionFlow
+  codename: fusionflow
+  version: v1.0
+  style: "Enterprise-grade, GitOps-ready, security by default, observability first"
+  architecture: "Event-driven microservices with CQRS pattern"
+  compliance: "SOC2, GDPR, HIPAA ready"
+
+workflow:
+  - rule: "Always propose small, PR-sized changes (≤400 LOC)."
+  - rule: "For each output include: file paths, exact code blocks, and explanation of how it meets PRD."
+  - rule: "Follow cycle: Plan → Implement → Test → Document."
+  - rule: "Prefer incremental delivery over large dumps of code."
+  - rule: "Use conventional commits: feat/fix/docs/style/refactor/test/chore."
+  - rule: "Require code review for all changes (minimum 1 reviewer)."
+  - rule: "Squash commits before merging to main branch."
+  - rule: "Create feature branches from main: feature/description or fix/description."
+
+coding:
+  - rule: "TypeScript: strict mode, ESLint + Prettier, no-explicit-any."
+  - rule: "Go: idiomatic style, gofumpt, staticcheck, golangci-lint."
+  - rule: "Unit tests required for all new code (Vitest for TS, go test for Go)."
+  - rule: "Target ≥80% test coverage on core logic, ≥90% for critical paths."
+  - rule: "Shared utilities go in packages/common."
+  - rule: "Use dependency injection for testability."
+  - rule: "Implement interfaces for all external dependencies."
+  - rule: "Use semantic versioning for all packages."
+  - rule: "Prefer composition over inheritance."
+  - rule: "Use async/await over Promises.then() in TypeScript."
+  - rule: "Handle errors explicitly, never ignore exceptions."
+
+security:
+  - rule: "Validate all inputs (zod for TS, Go structs with validation tags)."
+  - rule: "Never log secrets, PII, or sensitive data."
+  - rule: "JWT auth via Keycloak (RS256) with token rotation."
+  - rule: "RBAC enforced via OPA policies with least privilege principle."
+  - rule: "Vault for secrets, `.env` fallback only in dev."
+  - rule: "Default-deny posture for authorization."
+  - rule: "Implement rate limiting and DDoS protection."
+  - rule: "Use HTTPS/TLS 1.3 for all external communications."
+  - rule: "Implement API versioning and backward compatibility."
+  - rule: "Sanitize all user inputs to prevent injection attacks."
+  - rule: "Use secure headers (HSTS, CSP, X-Frame-Options)."
+  - rule: "Implement audit logging for all security events."
+  - rule: "Regular security scans and dependency updates."
+  - rule: "Use mTLS for service-to-service communication."
+
+observability:
+  - rule: "Add OpenTelemetry spans for every new code path with meaningful names."
+  - rule: "Propagate traceId in APIs, Kafka messages, flows, and database queries."
+  - rule: "Logs → Loki, Metrics → Prometheus, Traces → Tempo/Jaeger, Audit events → ClickHouse."
+  - rule: "All flows and connectors must support trace context."
+  - rule: "Implement structured logging with correlation IDs."
+  - rule: "Define SLOs/SLIs for all critical user journeys."
+  - rule: "Use health checks and readiness probes for all services."
+  - rule: "Implement distributed tracing with sampling strategies."
+  - rule: "Monitor business metrics alongside technical metrics."
+  - rule: "Set up alerting with proper escalation procedures."
+  - rule: "Use log aggregation and centralized monitoring."
+  - rule: "Implement performance profiling and bottleneck detection."
+
+monorepo:
+  - rule: "Use Turborepo + pnpm workspaces with proper dependency management."
+  - rule: "Directory structure: apps/, packages/, infra/, docs/, examples/."
+  - rule: "Dockerfiles must be multi-stage and distroless with security scanning."
+  - rule: "CI/CD: GitHub Actions + Helm + Kustomize overlays for dev/stage/prod."
+  - rule: "Use workspace constraints to prevent circular dependencies."
+  - rule: "Implement proper package versioning and changelog management."
+  - rule: "Use consistent naming conventions across all packages."
+  - rule: "Implement proper build caching and incremental builds."
+
+connectors:
+  - rule: "All connectors implement: connect, health, read, write, disconnect."
+  - rule: "Each operation must support retries, backoff, timeout, and circuit breaker."
+  - rule: "Connectors must emit otel spans with proper attributes."
+  - rule: "Include tests + mocks for every connector with 100% coverage."
+  - rule: "Update docs/connectors.md when adding a connector."
+  - rule: "Implement connection pooling for database connectors."
+  - rule: "Support batch operations for better performance."
+  - rule: "Implement proper error handling and recovery mechanisms."
+  - rule: "Use connection encryption (TLS/SSL) for all external connections."
+  - rule: "Implement connector-specific configuration validation."
+  - rule: "Support connector versioning and backward compatibility."
+
+flow-dsl:
+  - rule: "Flows defined in YAML → validated via JSON Schema + Zod."
+  - rule: "Must include metadata, triggers, steps, transports, policies, observability, compliance tags."
+  - rule: "Examples required in examples/flows/."
+  - rule: "Round-trip tests (yaml → validate → ts → yaml) required."
+  - rule: "Support flow versioning and migration strategies."
+  - rule: "Implement flow templates and reusable components."
+  - rule: "Support conditional logic and branching in flows."
+  - rule: "Implement flow validation with comprehensive error messages."
+  - rule: "Support flow composition and nested flows."
+  - rule: "Implement flow optimization and performance analysis."
+
+ui:
+  - rule: "Use Next.js + Tailwind + shadcn/ui + D3 + Monaco."
+  - rule: "Hybrid low-code/pro-code: DAG builder + YAML editor sync."
+  - rule: "Payload Playground: JSONata sandbox with preview."
+  - rule: "Dark mode by default."
+  - rule: "UI features must respect RBAC roles."
+  - rule: "Implement responsive design for all screen sizes."
+  - rule: "Use accessibility standards (WCAG 2.1 AA compliance)."
+  - rule: "Implement progressive web app (PWA) features."
+  - rule: "Use React Query for efficient data fetching and caching."
+  - rule: "Implement proper error boundaries and fallback UI."
+  - rule: "Use internationalization (i18n) for multi-language support."
+  - rule: "Implement proper loading states and skeleton screens."
+  - rule: "Use proper TypeScript types for all components and props."
+
+runtime:
+  - rule: "Runtime supports event-driven + batch flows."
+  - rule: "Stateless services, horizontally scalable."
+  - rule: "Checkpointing in Postgres, DLQ in Kafka/S3."
+  - rule: "Resilience: retries, backoff, circuit breaker, bulkhead."
+  - rule: "Implement proper resource management and cleanup."
+  - rule: "Support flow orchestration and scheduling."
+  - rule: "Implement proper error handling and dead letter queues."
+  - rule: "Support flow monitoring and alerting."
+  - rule: "Implement proper scaling policies and auto-scaling."
+  - rule: "Support flow debugging and troubleshooting."
+  - rule: "Implement proper backup and disaster recovery."
+  - rule: "Support flow performance optimization and tuning."
+
+edge:
+  - rule: "Edge agent written in Go."
+  - rule: "Must support offline store-and-forward."
+  - rule: "Flows must be signed and verified before run."
+  - rule: "Cross-compile builds for amd64 and arm64."
+  - rule: "Implement secure communication with central services."
+  - rule: "Support local flow execution and caching."
+  - rule: "Implement proper resource constraints and limits."
+  - rule: "Support automatic updates and version management."
+  - rule: "Implement proper logging and diagnostics."
+  - rule: "Support edge-to-edge communication."
+  - rule: "Implement proper security and access control."
+  - rule: "Support edge device management and monitoring."
+
+ci-cd:
+  - rule: "Use GitHub Actions for lint/test/build/release."
+  - rule: "Build Docker images with multi-stage + distroless."
+  - rule: "Publish Helm charts to infra/helm/fusionflow."
+  - rule: "Fail build on critical vulnerabilities (Trivy, npm audit)."
+  - rule: "Implement proper environment promotion strategies."
+  - rule: "Use semantic versioning and automated releases."
+  - rule: "Implement proper rollback procedures."
+  - rule: "Use infrastructure as code (Terraform/Pulumi)."
+  - rule: "Implement proper secrets management in CI/CD."
+  - rule: "Use proper testing strategies (unit, integration, e2e)."
+  - rule: "Implement proper deployment strategies (blue-green, canary)."
+  - rule: "Use proper monitoring and alerting in production."
+  - rule: "Implement proper environment promotion strategies."
+  - rule: "Use semantic versioning and automated releases."
+  - rule: "Implement proper rollback procedures."
+  - rule: "Use infrastructure as code (Terraform/Pulumi)."
+  - rule: "Implement proper secrets management in CI/CD."
+  - rule: "Use proper testing strategies (unit, integration, e2e)."
+  - rule: "Implement proper deployment strategies (blue-green, canary)."
+  - rule: "Use proper monitoring and alerting in production."
+
+documentation:
+  - rule: "Every feature requires ADR + guide + example."
+  - rule: "Docs stored in docs/ and auto-deployed with Docusaurus or Next.js."
+  - rule: "Examples stored in examples/flows/ or examples/connectors/."
+  - rule: "Maintain API documentation with OpenAPI/Swagger."
+  - rule: "Create user guides and tutorials for all features."
+  - rule: "Document architecture decisions and trade-offs."
+  - rule: "Maintain troubleshooting guides and FAQs."
+  - rule: "Create onboarding documentation for new developers."
+  - rule: "Document security practices and compliance requirements."
+  - rule: "Maintain changelog and migration guides."
+
+acceptance-checklist:
+  - "[ ] Code compiles & tests pass."
+  - "[ ] Linter & formatter pass."
+  - "[ ] Unit/integration tests added or updated."
+  - "[ ] Observability hooks present."
+  - "[ ] Security posture enforced."
+  - "[ ] Docs/examples updated."
+  - "[ ] Change is small and reviewable."
+  - "[ ] Performance impact assessed."
+  - "[ ] Error handling implemented."
+  - "[ ] Logging and monitoring added."
+  - "[ ] Security review completed."
+  - "[ ] Documentation updated."
+  - "[ ] Backward compatibility maintained."
+  - "[ ] Rollback plan prepared."
+
+performance:
+  - rule: "Implement proper caching strategies (Redis, in-memory)."
+  - rule: "Use database connection pooling and query optimization."
+  - rule: "Implement proper indexing strategies for databases."
+  - rule: "Use CDN for static assets and API responses."
+  - rule: "Implement proper load balancing and auto-scaling."
+  - rule: "Use async processing for long-running operations."
+  - rule: "Implement proper resource limits and quotas."
+  - rule: "Use performance monitoring and profiling tools."
+  - rule: "Implement proper database migration strategies."
+  - rule: "Use efficient data serialization formats (Protocol Buffers, MessagePack)."
+
+testing:
+  - rule: "Write unit tests for all business logic."
+  - rule: "Implement integration tests for all APIs."
+  - rule: "Use end-to-end tests for critical user journeys."
+  - rule: "Implement performance and load testing."
+  - rule: "Use contract testing for service integrations."
+  - rule: "Implement chaos engineering and resilience testing."
+  - rule: "Use test data management and fixtures."
+  - rule: "Implement proper test isolation and cleanup."
+  - rule: "Use test coverage reporting and analysis."
+  - rule: "Implement automated testing in CI/CD pipeline."
+
+data-management:
+  - rule: "Implement proper data validation and sanitization."
+  - rule: "Use database transactions for data consistency."
+  - rule: "Implement proper data backup and recovery."
+  - rule: "Use data encryption at rest and in transit."
+  - rule: "Implement proper data retention and archival."
+  - rule: "Use data versioning and change tracking."
+  - rule: "Implement proper data access controls."
+  - rule: "Use data quality monitoring and validation."
+  - rule: "Implement proper data migration strategies."
+  - rule: "Use data governance and compliance frameworks."
+
+prompts:
+  - name: "Add New Connector"
+    body: |
+      Create a new connector named `<Name>` under packages/connector-sdk/connectors/<name> with:
+      - index.ts exporting `create<Name>Connector(config)`
+      - operations: `read`, `write`, `health` with input/output zod schemas
+      - resilience policies hooks
+      - otel spans
+      - unit tests with mocked dependency
+      Also update connectors registry and docs.
+
+  - name: "Implement JSONata Step"
+    body: |
+      Add a runtime step `jsonata` that:
+      - accepts `{ expression: string, variables?: Record<string,any> }`
+      - evaluates against `payload.body`
+      - preserves `payload.meta`
+      - emits structured logs with input/output hashes
+      - has unit tests with 5 mapping cases and one error case
+
+  - name: "DLQ to S3-Compatible Store"
+    body: |
+      Implement DLQ writer with S3-compatible client (MinIO for local).
+      - Interface: `writeDLQ(flowId, stepId, reason, payload)` → returns url
+      - Config from env; integration test using local MinIO container.
+
+  - name: "Trace Propagation Through Kafka"
+    body: |
+      Add trace context inject/extract for Kafka producer/consumer using W3C traceparent.
+      - Verify with an integration test that a span in producer links to span in consumer.
+
+  - name: "Keycloak JWT Guard"
+    body: |
+      Implement middleware verifying JWT (RS256) and extracting roles/tenant.
+      - Cache JWKS with rotation.
+      - Map roles to RBAC policies; deny by default.
+      - Unit tests: valid, expired, wrong audience, missing roles.
+
+  - name: "OPA Policy Check"
+    body: |
+      Create authz/opa.ts with function `allow(ctx, action, resource)`.
+      - Dev mode: always allow; Prod: POST to OPA sidecar with retry/backoff.
+      - Unit tests with mocked responses.
+
+  - name: "Vault Secrets Adapter"
+    body: |
+      Implement secrets/vault.ts with get/set/list using token from env.
+      - Safe logging (no secret values).
+      - Cache with TTL.
+      - Fallback .env for dev only.
+      - Tests with in-memory fake client.
+
+  - name: "Simulation Endpoint + UI Panel"
+    body: |
+      Backend: /simulate endpoint running flow in sandbox, returning step timeline.
+      Frontend: Add /simulate page with YAML editor + timeline visualization.
+      - Create React components for StepTimeline, PayloadDiff.
+      - Tests for backend sandbox timeouts and deterministic output.
+
+  - name: "Edge Agent Build Matrix"
+    body: |
+      Add GoReleaser config and GitHub Actions matrix to build edge-agent for linux/amd64 and arm64.
+      Upload artifacts and Docker images.
+
+  - name: "Add Database Migration"
+    body: |
+      Create a new database migration for feature `<Feature>`:
+      - Use proper migration naming: YYYYMMDD_HHMMSS_feature_description.sql
+      - Include both up and down migrations
+      - Add proper indexes and constraints
+      - Include data validation and rollback procedures
+      - Add integration tests for migration
+
+  - name: "Implement API Rate Limiting"
+    body: |
+      Add rate limiting to API endpoint `/api/v1/<endpoint>`:
+      - Use Redis for distributed rate limiting
+      - Implement sliding window algorithm
+      - Add proper headers (X-RateLimit-*)
+      - Include rate limit bypass for authenticated users
+      - Add monitoring and alerting for rate limit violations
+
+  - name: "Add OpenTelemetry Instrumentation"
+    body: |
+      Add OpenTelemetry instrumentation to `<component>`:
+      - Create spans for all major operations
+      - Add proper attributes and events
+      - Implement trace context propagation
+      - Add metrics for performance monitoring
+      - Include proper error handling and span status
+
+  - name: "Implement Caching Strategy"
+    body: |
+      Add caching for `<resource>`:
+      - Use Redis for distributed caching
+      - Implement proper cache invalidation
+      - Add cache warming strategies
+      - Include cache hit/miss monitoring
+      - Add fallback mechanisms for cache failures
+
+  - name: "Add Security Headers"
+    body: |
+      Implement security headers for `<service>`:
+      - HSTS, CSP, X-Frame-Options, X-Content-Type-Options
+      - Referrer-Policy, Permissions-Policy
+      - Content-Security-Policy with proper directives
+      - Include security header testing in CI/CD
+
+  - name: "Implement Error Handling"
+    body: |
+      Add comprehensive error handling to `<component>`:
+      - Create custom error types and codes
+      - Implement proper error logging and monitoring
+      - Add error recovery mechanisms
+      - Include user-friendly error messages
+      - Add error tracking and alerting
+
+  - name: "Add Performance Monitoring"
+    body: |
+      Implement performance monitoring for `<service>`:
+      - Add custom metrics and dashboards
+      - Implement performance alerts and SLOs
+      - Add distributed tracing
+      - Include performance testing in CI/CD
+      - Add performance optimization recommendations
+
+  - name: "Implement Data Validation"
+    body: |
+      Add comprehensive data validation to `<component>`:
+      - Use Zod schemas for TypeScript validation
+      - Add custom validation rules
+      - Implement validation error handling
+      - Include validation testing
+      - Add validation performance monitoring
