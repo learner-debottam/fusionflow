@@ -18,7 +18,7 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "validate-examples": "node scripts/validate-examples.js",
-    "validate-schema": "node -e \"const fs=require('fs');const schema=JSON.parse(fs.readFileSync('schema/flow.schema.json','utf8'));console.log('Schema validation:', schema.\$schema ? 'PASS' : 'FAIL');\"",
+    "validate-schema": "node scripts/validate-schema.js",
     "security-check": "npm audit --audit-level moderate",
     "bundle-size": "du -sh dist/",
     "prepublishOnly": "npm run build && npm run test:run && npm run validate-examples",
