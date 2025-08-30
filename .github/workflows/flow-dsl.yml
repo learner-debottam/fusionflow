@@ -1,0 +1,598 @@
+name: Flow DSL Validation & Testing
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'packages/flow-dsl/**'
+      - 'examples/flows/**'
+      - '.github/workflows/flow-dsl.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'packages/flow-dsl/**'
+      - 'examples/flows/**'
+      - '.github/workflows/flow-dsl.yml'
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8.15.0'
+
+jobs:
+  # Flow DSL Specific Validation
+  flow-dsl-validation:
+    name: Flow DSL Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Flow DSL package
+        run: |
+          cd packages/flow-dsl
+          pnpm build
+
+      - name: Validate JSON Schema
+        run: |
+          echo "🔍 Validating JSON Schema..."
+          cd packages/flow-dsl
+          node -e "
+            const fs = require('fs');
+            const schema = JSON.parse(fs.readFileSync('schema/flow.schema.json', 'utf8'));
+            
+            // Basic schema validation
+            if (!schema.\$schema) {
+              console.error('❌ Missing \$schema field');
+              process.exit(1);
+            }
+            
+            if (!schema.definitions) {
+              console.error('❌ Missing definitions');
+              process.exit(1);
+            }
+            
+            // Check required definitions
+            const requiredDefs = ['Metadata', 'Trigger', 'Step', 'Transport', 'Policy', 'Observability'];
+            for (const def of requiredDefs) {
+              if (!schema.definitions[def]) {
+                console.error(\`❌ Missing definition: \${def}\`);
+                process.exit(1);
+              }
+            }
+            
+            console.log('✅ JSON Schema validation passed');
+          "
+
+      - name: Validate YAML Examples
+        run: |
+          echo "🔍 Validating YAML examples..."
+          cd packages/flow-dsl
+          
+          # Install js-yaml if not available
+          if ! node -e "require('js-yaml')" 2>/dev/null; then
+            pnpm add js-yaml @types/js-yaml
+          fi
+          
+          # Validate each example
+          for file in ../../examples/flows/*.yaml; do
+            echo "Validating $file..."
+            node -e "
+              const fs = require('fs');
+              const yaml = require('js-yaml');
+              
+              try {
+                const content = fs.readFileSync('$file', 'utf8');
+                const data = yaml.load(content);
+                console.log(\`✅ \${'$file'} - YAML syntax valid\`);
+              } catch (error) {
+                console.error(\`❌ \${'$file'} - YAML syntax error: \${error.message}\`);
+                process.exit(1);
+              }
+            "
+          done
+
+      - name: Round-trip Validation Test
+        run: |
+          echo "🔄 Running round-trip validation tests..."
+          cd packages/flow-dsl
+          pnpm test -- --run --reporter=verbose
+
+      - name: Schema Coverage Check
+        run: |
+          echo "📊 Checking schema coverage..."
+          cd packages/flow-dsl
+          node -e "
+            const fs = require('fs');
+            const schema = JSON.parse(fs.readFileSync('schema/flow.schema.json', 'utf8'));
+            const types = require('./dist/types.js');
+            
+            // Check if all TypeScript types have corresponding schema definitions
+            const schemaDefs = Object.keys(schema.definitions);
+            const typeExports = Object.keys(types).filter(key => key.endsWith('Schema'));
+            
+            console.log('Schema definitions:', schemaDefs.length);
+            console.log('TypeScript schemas:', typeExports.length);
+            
+            // Basic coverage check
+            if (schemaDefs.length < 20) {
+              console.error('❌ Insufficient schema definitions');
+              process.exit(1);
+            }
+            
+            console.log('✅ Schema coverage check passed');
+          "
+
+  # Flow DSL Security & Quality
+  flow-dsl-security:
+    name: Flow DSL Security & Quality
+    runs-on: ubuntu-latest
+    needs: flow-dsl-validation
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Security audit for Flow DSL
+        run: |
+          echo "🔒 Running security audit for Flow DSL..."
+          cd packages/flow-dsl
+          pnpm audit --audit-level moderate
+
+      - name: Check for sensitive data in examples
+        run: |
+          echo "🔍 Checking for sensitive data in examples..."
+          
+          # Check for hardcoded secrets in YAML files
+          if grep -r -i "password\|secret\|token\|key" examples/flows/ | grep -v "\\$\\{env\\."; then
+            echo "❌ Found potential hardcoded secrets in examples"
+            grep -r -i "password\|secret\|token\|key" examples/flows/ | grep -v "\\$\\{env\\."
+            exit 1
+          fi
+          
+          echo "✅ No hardcoded secrets found"
+
+      - name: Validate environment variable usage
+        run: |
+          echo "🔍 Validating environment variable usage..."
+          
+          # Check that sensitive configs use environment variables
+          for file in examples/flows/*.yaml; do
+            echo "Checking $file..."
+            if grep -q "password:" "$file" && ! grep -q "\\$\\{env\\." "$file"; then
+              echo "❌ Found hardcoded password in $file"
+              exit 1
+            fi
+          done
+          
+          echo "✅ Environment variable usage validated"
+
+      - name: Code quality check
+        run: |
+          echo "📝 Running code quality checks..."
+          cd packages/flow-dsl
+          
+          # Check TypeScript compilation
+          pnpm type-check
+          
+          # Check for TODO/FIXME comments
+          if grep -r "TODO\|FIXME" src/ --exclude="*.test.ts"; then
+            echo "⚠️  Found TODO/FIXME comments in source code"
+            grep -r "TODO\|FIXME" src/ --exclude="*.test.ts"
+          fi
+
+  # Flow DSL Integration Tests
+  flow-dsl-integration:
+    name: Flow DSL Integration Tests
+    runs-on: ubuntu-latest
+    needs: flow-dsl-security
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Test Flow DSL integration
+        run: |
+          echo "🧪 Running integration tests..."
+          cd packages/flow-dsl
+          
+          # Test that the package can be imported by other packages
+          node -e "
+            try {
+              const { FlowSchema, validateFlow } = require('./dist/index.js');
+              console.log('✅ Flow DSL package import successful');
+              
+              // Test basic validation
+              const testFlow = {
+                metadata: { name: 'Test', version: '1.0.0' },
+                steps: [{ id: 'test', name: 'Test', step: { type: 'checkpoint', name: 'test' } }]
+              };
+              
+              const result = validateFlow(testFlow);
+              if (result.valid) {
+                console.log('✅ Basic validation working');
+              } else {
+                console.error('❌ Basic validation failed');
+                process.exit(1);
+              }
+            } catch (error) {
+              console.error('❌ Integration test failed:', error.message);
+              process.exit(1);
+            }
+          "
+
+      - name: Test example flows
+        run: |
+          echo "🧪 Testing example flows..."
+          cd packages/flow-dsl
+          
+          # Test each example flow
+          for file in ../../examples/flows/*.yaml; do
+            echo "Testing $file..."
+            node -e "
+              const fs = require('fs');
+              const yaml = require('js-yaml');
+              const { validateFlow } = require('./dist/index.js');
+              
+              try {
+                const content = fs.readFileSync('$file', 'utf8');
+                const flowData = yaml.load(content);
+                const result = validateFlow(flowData);
+                
+                if (result.valid) {
+                  console.log(\`✅ \${'$file'} - Validation passed\`);
+                } else {
+                  console.error(\`❌ \${'$file'} - Validation failed:\`);
+                  console.error(result.errors);
+                  process.exit(1);
+                }
+              } catch (error) {
+                console.error(\`❌ \${'$file'} - Error: \${error.message}\`);
+                process.exit(1);
+              }
+            "
+          done
+
+  # Flow DSL Documentation Check
+  flow-dsl-docs:
+    name: Flow DSL Documentation Check
+    runs-on: ubuntu-latest
+    needs: flow-dsl-integration
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README completeness
+        run: |
+          echo "📚 Checking documentation completeness..."
+          
+          # Check if README exists and has required sections
+          if [ ! -f "packages/flow-dsl/README.md" ]; then
+            echo "❌ README.md missing"
+            exit 1
+          fi
+          
+          # Check for required sections
+          required_sections=("Installation" "Usage" "Features" "Testing" "Examples")
+          for section in "${required_sections[@]}"; do
+            if ! grep -q "## $section" packages/flow-dsl/README.md; then
+              echo "❌ Missing section: $section"
+              exit 1
+            fi
+          done
+          
+          echo "✅ Documentation completeness check passed"
+
+      - name: Check schema documentation
+        run: |
+          echo "📋 Checking schema documentation..."
+          
+          # Check if schema file exists
+          if [ ! -f "packages/flow-dsl/schema/flow.schema.json" ]; then
+            echo "❌ Schema file missing"
+            exit 1
+          fi
+          
+          # Check schema has descriptions
+          node -e "
+            const fs = require('fs');
+            const schema = JSON.parse(fs.readFileSync('packages/flow-dsl/schema/flow.schema.json', 'utf8'));
+            
+            let hasDescriptions = 0;
+            let totalProps = 0;
+            
+            function checkDescriptions(obj, path = '') {
+              if (obj.properties) {
+                for (const [key, value] of Object.entries(obj.properties)) {
+                  totalProps++;
+                  if (value.description) hasDescriptions++;
+                }
+              }
+              if (obj.definitions) {
+                for (const [key, value] of Object.entries(obj.definitions)) {
+                  checkDescriptions(value, path + '.' + key);
+                }
+              }
+            }
+            
+            checkDescriptions(schema);
+            const coverage = (hasDescriptions / totalProps * 100).toFixed(1);
+            
+            console.log(\`Schema documentation coverage: \${coverage}%\`);
+            
+            if (coverage < 50) {
+              console.error('❌ Insufficient schema documentation');
+              process.exit(1);
+            }
+            
+            console.log('✅ Schema documentation check passed');
+          "
+
+  # Flow DSL Performance Test
+  flow-dsl-performance:
+    name: Flow DSL Performance Test
+    runs-on: ubuntu-latest
+    needs: flow-dsl-docs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Flow DSL
+        run: |
+          cd packages/flow-dsl
+          pnpm build
+
+      - name: Performance test
+        run: |
+          echo "⚡ Running performance tests..."
+          cd packages/flow-dsl
+          
+          # Test validation performance
+          node -e "
+            const { validateFlow } = require('./dist/index.js');
+            const fs = require('fs');
+            const yaml = require('js-yaml');
+            
+            // Load a complex example
+            const content = fs.readFileSync('../../examples/flows/data-sync-flow.yaml', 'utf8');
+            const flowData = yaml.load(content);
+            
+            // Performance test
+            const iterations = 100;
+            const start = Date.now();
+            
+            for (let i = 0; i < iterations; i++) {
+              validateFlow(flowData);
+            }
+            
+            const end = Date.now();
+            const avgTime = (end - start) / iterations;
+            
+            console.log(\`Average validation time: \${avgTime.toFixed(2)}ms\`);
+            
+            if (avgTime > 100) {
+              console.error('❌ Validation performance too slow');
+              process.exit(1);
+            }
+            
+            console.log('✅ Performance test passed');
+          "
+
+  # Flow DSL Bundle Size Check
+  flow-dsl-bundle:
+    name: Flow DSL Bundle Size Check
+    runs-on: ubuntu-latest
+    needs: flow-dsl-performance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Flow DSL
+        run: |
+          cd packages/flow-dsl
+          pnpm build
+
+      - name: Check bundle size
+        run: |
+          echo "📦 Checking bundle size..."
+          cd packages/flow-dsl
+          
+          # Check dist folder size
+          dist_size=$(du -s dist/ | cut -f1)
+          echo "Dist folder size: ${dist_size}KB"
+          
+          if [ "$dist_size" -gt 1000 ]; then
+            echo "❌ Bundle size too large: ${dist_size}KB"
+            exit 1
+          fi
+          
+          echo "✅ Bundle size check passed"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: flow-dsl-build
+          path: packages/flow-dsl/dist/
+          retention-days: 7
+
+  # Flow DSL Release Check
+  flow-dsl-release:
+    name: Flow DSL Release Check
+    runs-on: ubuntu-latest
+    needs: [flow-dsl-validation, flow-dsl-security, flow-dsl-integration, flow-dsl-docs, flow-dsl-performance, flow-dsl-bundle]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and test
+        run: |
+          cd packages/flow-dsl
+          pnpm build
+          pnpm test -- --run
+
+      - name: Check package.json
+        run: |
+          echo "📋 Checking package.json..."
+          cd packages/flow-dsl
+          
+          node -e "
+            const pkg = require('./package.json');
+            
+            // Check required fields
+            const required = ['name', 'version', 'description', 'main', 'types'];
+            for (const field of required) {
+              if (!pkg[field]) {
+                console.error(\`❌ Missing required field: \${field}\`);
+                process.exit(1);
+              }
+            }
+            
+            // Check version format
+            if (!/^\\d+\\.\\d+\\.\\d+/.test(pkg.version)) {
+              console.error('❌ Invalid version format');
+              process.exit(1);
+            }
+            
+            console.log('✅ Package.json validation passed');
+          "
+
+      - name: Create release summary
+        run: |
+          echo "📝 Creating release summary..."
+          
+          cat << EOF > flow-dsl-release-summary.md
+          # Flow DSL Release Summary
+          
+          ## Version
+          \$(cd packages/flow-dsl && node -p "require('./package.json').version")
+          
+          ## Changes
+          - Comprehensive Flow DSL implementation
+          - JSON Schema validation
+          - YAML example flows
+          - Round-trip testing
+          - Security and quality checks
+          
+          ## Test Results
+          - ✅ Schema validation
+          - ✅ YAML examples validation
+          - ✅ Round-trip testing
+          - ✅ Security audit
+          - ✅ Integration tests
+          - ✅ Documentation check
+          - ✅ Performance tests
+          - ✅ Bundle size check
+          
+          ## Files Changed
+          \$(git diff --name-only HEAD~1 | grep -E "(packages/flow-dsl|examples/flows)" | head -10)
+          
+          EOF
+          
+          cat flow-dsl-release-summary.md
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('flow-dsl-release-summary.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

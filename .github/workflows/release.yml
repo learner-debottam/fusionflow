@@ -1,0 +1,299 @@
+name: Release Flow DSL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/flow-dsl/**'
+      - 'examples/flows/**'
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8.15.0'
+
+jobs:
+  # Check if release is needed
+  check-release:
+    name: Check Release
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check if release is needed
+        id: check
+        run: |
+          cd packages/flow-dsl
+          
+          # Get current version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Check if there are changes since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          
+          # Check if there are changes in flow-dsl package
+          CHANGES=$(git diff --name-only $LAST_TAG HEAD | grep -E "(packages/flow-dsl|examples/flows)" || true)
+          
+          if [ -n "$CHANGES" ]; then
+            echo "Changes detected in Flow DSL package"
+            echo "should-release=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "No changes detected in Flow DSL package"
+            echo "should-release=false" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          fi
+
+  # Run all validations
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    needs: check-release
+    if: needs.check-release.outputs.should-release == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run all validations
+        run: |
+          cd packages/flow-dsl
+          
+          echo "🔍 Running comprehensive validations..."
+          
+          # Type check
+          echo "📝 Type checking..."
+          pnpm type-check
+          
+          # Lint
+          echo "🔧 Linting..."
+          pnpm lint
+          
+          # Format check
+          echo "🎨 Format check..."
+          pnpm format:check
+          
+          # Build
+          echo "🏗️ Building..."
+          pnpm build
+          
+          # Tests
+          echo "🧪 Running tests..."
+          pnpm test:run
+          
+          # Coverage
+          echo "📊 Coverage report..."
+          pnpm test:coverage
+          
+          # Security
+          echo "🔒 Security audit..."
+          pnpm security-check
+          
+          # Validate examples
+          echo "📄 Validating examples..."
+          pnpm validate-examples
+          
+          # Bundle size
+          echo "📦 Bundle size check..."
+          pnpm bundle-size
+          
+          echo "✅ All validations passed!"
+
+  # Create release
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [check-release, validate]
+    if: needs.check-release.outputs.should-release == 'true'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: |
+          cd packages/flow-dsl
+          pnpm build
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          cd packages/flow-dsl
+          
+          # Get changes since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          CHANGES=$(git log --oneline --no-merges $LAST_TAG..HEAD -- packages/flow-dsl/ examples/flows/ | head -20)
+          
+          if [ -z "$CHANGES" ]; then
+            CHANGES="No specific changes detected"
+          fi
+          
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "flow-dsl-v${{ needs.check-release.outputs.version }}"
+          release_name: "Flow DSL v${{ needs.check-release.outputs.version }}"
+          body: |
+            ## Flow DSL v${{ needs.check-release.outputs.version }}
+            
+            ### What's Changed
+            
+            This release includes updates to the FusionFlow Domain Specific Language:
+            
+            **Features:**
+            - Comprehensive Flow DSL implementation
+            - JSON Schema validation
+            - YAML example flows
+            - Round-trip testing
+            - Security and quality checks
+            
+            **Changes:**
+            ```
+            ${{ steps.changelog.outputs.changes }}
+            ```
+            
+            ### Installation
+            
+            ```bash
+            npm install @fusionflow/flow-dsl@${{ needs.check-release.outputs.version }}
+            ```
+            
+            ### Documentation
+            
+            See [Flow DSL README](packages/flow-dsl/README.md) for complete documentation and examples.
+            
+            ### Examples
+            
+            Check out the example flows in `examples/flows/`:
+            - `simple-api-flow.yaml` - Basic API integration
+            - `data-sync-flow.yaml` - Complex data synchronization
+            - `iot-data-processing.yaml` - IoT sensor data processing
+            
+            ### Breaking Changes
+            
+            None in this release.
+            
+            ---
+            *This release was automatically generated by the Flow DSL CI system.*
+          draft: false
+          prerelease: false
+
+      - name: Upload release assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./packages/flow-dsl/dist/
+          asset_name: flow-dsl-v${{ needs.check-release.outputs.version }}.tgz
+          asset_content_type: application/gzip
+
+  # Publish to npm (if configured)
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [check-release, validate, release]
+    if: needs.check-release.outputs.should-release == 'true'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: |
+          cd packages/flow-dsl
+          pnpm build
+
+      - name: Publish to npm
+        run: |
+          cd packages/flow-dsl
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Notify team
+  notify:
+    name: Notify Team
+    runs-on: ubuntu-latest
+    needs: [check-release, release, publish]
+    if: always()
+    steps:
+      - name: Notify on success
+        if: needs.check-release.outputs.should-release == 'true' && success()
+        run: |
+          echo "🎉 Flow DSL v${{ needs.check-release.outputs.version }} has been successfully released!"
+          echo "📦 Published to npm: @fusionflow/flow-dsl@${{ needs.check-release.outputs.version }}"
+          echo "🏷️ Release tag: flow-dsl-v${{ needs.check-release.outputs.version }}"
+
+      - name: Notify on failure
+        if: needs.check-release.outputs.should-release == 'true' && failure()
+        run: |
+          echo "❌ Flow DSL release failed!"
+          echo "Please check the workflow logs for details."

@@ -10,11 +10,22 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
+    "test:run": "vitest --run",
     "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src",
+    "format:check": "prettier --check src",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "validate-examples": "node scripts/validate-examples.js"
+    "validate-examples": "node scripts/validate-examples.js",
+    "validate-schema": "node -e \"const fs=require('fs');const schema=JSON.parse(fs.readFileSync('schema/flow.schema.json','utf8'));console.log('Schema validation:', schema.\$schema ? 'PASS' : 'FAIL');\"",
+    "security-check": "npm audit --audit-level moderate",
+    "bundle-size": "du -sh dist/",
+    "prepublishOnly": "npm run build && npm run test:run && npm run validate-examples",
+    "ci:validate": "npm run type-check && npm run lint && npm run format:check",
+    "ci:test": "npm run test:run && npm run test:coverage",
+    "ci:security": "npm run security-check",
+    "ci:build": "npm run build && npm run bundle-size"
   },
   "dependencies": {
     "@fusionflow/common": "workspace:*",
@@ -36,8 +47,32 @@
     "flow",
     "yaml",
     "workflow",
-    "automation"
+    "automation",
+    "json-schema",
+    "validation"
   ],
   "author": "FusionFlow Team",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fusionflow/fusionflow.git",
+    "directory": "packages/flow-dsl"
+  },
+  "bugs": {
+    "url": "https://github.com/fusionflow/fusionflow/issues"
+  },
+  "homepage": "https://github.com/fusionflow/fusionflow#readme",
+  "files": [
+    "dist/**/*",
+    "schema/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
