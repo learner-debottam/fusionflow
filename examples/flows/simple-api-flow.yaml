@@ -1,0 +1,198 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+metadata:
+  name: "Simple API Integration Flow"
+  version: "1.0.0"
+  description: "Simple flow that fetches data from an API, transforms it, and stores it"
+  tags:
+    - "api"
+    - "integration"
+    - "demo"
+
+triggers:
+  - type: http
+    method: POST
+    path: "/api/v1/trigger"
+    headers:
+      Content-Type: "application/json"
+    auth:
+      type: api-key
+      config:
+        key: "${env.API_KEY}"
+
+steps:
+  - id: "start"
+    name: "Start"
+    description: "Initialize the flow"
+    step:
+      type: checkpoint
+      name: "flow-start"
+      data:
+        timestamp: "${now()}"
+    next: ["fetch-data"]
+    error: "error-handler"
+
+  - id: "fetch-data"
+    name: "Fetch Data"
+    description: "Fetch data from external API"
+    step:
+      type: connector
+      connectorRef: "http-connector"
+      operation: "get"
+      config:
+        url: "https://api.example.com/data"
+        headers:
+          Authorization: "Bearer ${env.EXTERNAL_API_TOKEN}"
+      timeout: 30
+      retry:
+        attempts: 3
+        backoff:
+          type: exponential
+          initialDelay: 1000
+          maxDelay: 10000
+          multiplier: 2
+    transport:
+      type: rest
+      method: GET
+      url: "https://api.example.com/data"
+      headers:
+        Authorization: "Bearer ${env.EXTERNAL_API_TOKEN}"
+        Accept: "application/json"
+      timeout: 30
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 30
+    next: ["transform-data"]
+    error: "error-handler"
+
+  - id: "transform-data"
+    name: "Transform Data"
+    description: "Transform the fetched data"
+    step:
+      type: map
+      expression: |
+        {
+          "id": $.id,
+          "name": $.name,
+          "email": $.email,
+          "status": $.status,
+          "processed_at": now(),
+          "source": "external-api"
+        }
+      variables:
+        now: "${new Date().toISOString()}"
+      outputFormat: json
+    next: ["validate-data"]
+    error: "error-handler"
+
+  - id: "validate-data"
+    name: "Validate Data"
+    description: "Validate the transformed data"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        
+        if (!data.id || !data.name || !data.email) {
+          throw new Error('Missing required fields: id, name, email');
+        }
+        
+        if (!data.email.includes('@')) {
+          throw new Error('Invalid email format');
+        }
+        
+        payload.meta.validation = {
+          timestamp: new Date().toISOString(),
+          valid: true
+        };
+        
+        return payload;
+      timeout: 10
+      sandbox: true
+    next: ["store-data"]
+    error: "error-handler"
+
+  - id: "store-data"
+    name: "Store Data"
+    description: "Store the data in database"
+    step:
+      type: connector
+      connectorRef: "postgres-connector"
+      operation: "insert"
+      config:
+        table: "processed_data"
+        data: "${payload.body}"
+      timeout: 60
+      retry:
+        attempts: 3
+        backoff:
+          type: exponential
+          initialDelay: 1000
+          maxDelay: 30000
+          multiplier: 2
+    transport:
+      type: jdbc
+      url: "jdbc:postgresql://${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}"
+      username: "${env.DB_USER}"
+      password: "${env.DB_PASSWORD}"
+      query: "INSERT INTO processed_data (id, name, email, status, processed_at, source) VALUES (?, ?, ?, ?, ?, ?)"
+      timeout: 60
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 60
+      - type: idempotency
+        key: "${payload.body.id}_${payload.body.processed_at}"
+        ttl: 3600
+        strategy: cache
+    next: ["complete"]
+    error: "error-handler"
+
+  - id: "complete"
+    name: "Complete"
+    description: "Mark flow as complete"
+    step:
+      type: checkpoint
+      name: "flow-complete"
+      data:
+        timestamp: "${now()}"
+        status: "completed"
+    next: []
+
+  - id: "error-handler"
+    name: "Error Handler"
+    description: "Handle errors"
+    step:
+      type: dlq
+      reason: "API integration error"
+      metadata:
+        flow_id: "${flow.id}"
+        error_timestamp: "${now()}"
+    transport:
+      type: kafka
+      topic: "api-integration-dlq"
+      bootstrapServers:
+        - "localhost:9092"
+      keySerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      valueSerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      acks: "1"
+      retries: 3
+
+observability:
+  traceId:
+    propagation: w3c
+    sampling:
+      rate: 1.0
+      strategy: always
+  sampleRate: 1.0
+  payloadSampling:
+    enabled: true
+    rate: 0.1
+    maxSize: 1024
+  metrics:
+    enabled: true
+    interval: 60
+  logs:
+    level: info
+    structured: true

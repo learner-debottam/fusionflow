@@ -1,0 +1,1372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fusionflow.io/schemas/flow.schema.json",
+  "title": "FusionFlow Flow Definition",
+  "description": "Schema for defining FusionFlow data flows with metadata, triggers, steps, transports, policies, and observability",
+  "type": "object",
+  "required": ["metadata", "steps"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://json-schema.org/draft/2020-12/schema",
+      "description": "JSON Schema version"
+    },
+    "metadata": {
+      "$ref": "#/definitions/Metadata"
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Trigger"
+      },
+      "description": "Flow triggers that initiate execution"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/FlowStep"
+      },
+      "description": "Flow execution steps"
+    },
+    "observability": {
+      "$ref": "#/definitions/Observability"
+    }
+  },
+  "definitions": {
+    "Metadata": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Flow name"
+        },
+        "version": {
+          "type": "string",
+          "default": "1.0.0",
+          "description": "Flow version"
+        },
+        "description": {
+          "type": "string",
+          "description": "Flow description"
+        },
+        "tenant": {
+          "type": "string",
+          "description": "Tenant identifier"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Flow tags"
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Owner"
+          },
+          "default": [],
+          "description": "Flow owners"
+        },
+        "compliance": {
+          "$ref": "#/definitions/Compliance"
+        },
+        "rbac": {
+          "$ref": "#/definitions/RBAC"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Creator identifier"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Last updater identifier"
+        }
+      }
+    },
+    "Owner": {
+      "type": "object",
+      "required": ["name", "email"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Owner name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Owner email"
+        },
+        "team": {
+          "type": "string",
+          "description": "Team name"
+        },
+        "role": {
+          "type": "string",
+          "description": "Role in the team"
+        }
+      }
+    },
+    "Compliance": {
+      "type": "object",
+      "properties": {
+        "gdpr": {
+          "type": "boolean",
+          "default": false,
+          "description": "GDPR compliance flag"
+        },
+        "hipaa": {
+          "type": "boolean",
+          "default": false,
+          "description": "HIPAA compliance flag"
+        },
+        "soc2": {
+          "type": "boolean",
+          "default": false,
+          "description": "SOC2 compliance flag"
+        },
+        "pci": {
+          "type": "boolean",
+          "default": false,
+          "description": "PCI compliance flag"
+        },
+        "dataRetention": {
+          "type": "number",
+          "description": "Data retention period in days"
+        },
+        "dataClassification": {
+          "type": "string",
+          "enum": ["public", "internal", "confidential", "restricted"],
+          "default": "internal",
+          "description": "Data classification level"
+        }
+      }
+    },
+    "RBAC": {
+      "type": "object",
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Required roles"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["read", "write", "execute", "admin"]
+          },
+          "default": ["read"],
+          "description": "Required permissions"
+        },
+        "tenants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Allowed tenants"
+        }
+      }
+    },
+    "Trigger": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/HttpTrigger"
+        },
+        {
+          "$ref": "#/definitions/ScheduleTrigger"
+        },
+        {
+          "$ref": "#/definitions/KafkaTrigger"
+        },
+        {
+          "$ref": "#/definitions/MqttTrigger"
+        },
+        {
+          "$ref": "#/definitions/SftpTrigger"
+        },
+        {
+          "$ref": "#/definitions/JdbcTrigger"
+        },
+        {
+          "$ref": "#/definitions/FileWatchTrigger"
+        }
+      ]
+    },
+    "HttpTrigger": {
+      "type": "object",
+      "required": ["type", "path"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "http"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "default": "POST"
+        },
+        "path": {
+          "type": "string",
+          "description": "HTTP endpoint path"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["none", "basic", "bearer", "api-key"],
+              "default": "none"
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "rateLimit": {
+          "type": "object",
+          "properties": {
+            "requests": {
+              "type": "number"
+            },
+            "window": {
+              "type": "number",
+              "description": "Time window in seconds"
+            }
+          }
+        }
+      }
+    },
+    "ScheduleTrigger": {
+      "type": "object",
+      "required": ["type", "cron"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "schedule"
+        },
+        "cron": {
+          "type": "string",
+          "description": "Cron expression"
+        },
+        "timezone": {
+          "type": "string",
+          "default": "UTC"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "KafkaTrigger": {
+      "type": "object",
+      "required": ["type", "topic", "groupId", "bootstrapServers"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "kafka"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "groupId": {
+          "type": "string"
+        },
+        "bootstrapServers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "autoCommit": {
+          "type": "boolean",
+          "default": true
+        },
+        "autoOffsetReset": {
+          "type": "string",
+          "enum": ["earliest", "latest"],
+          "default": "earliest"
+        },
+        "keyDeserializer": {
+          "type": "string",
+          "default": "org.apache.kafka.common.serialization.StringDeserializer"
+        },
+        "valueDeserializer": {
+          "type": "string",
+          "default": "org.apache.kafka.common.serialization.StringDeserializer"
+        }
+      }
+    },
+    "MqttTrigger": {
+      "type": "object",
+      "required": ["type", "topic", "broker", "clientId"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "mqtt"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "qos": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "broker": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      }
+    },
+    "SftpTrigger": {
+      "type": "object",
+      "required": ["type", "host", "username", "path"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "sftp"
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "number",
+          "default": 22
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "privateKey": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string",
+          "default": "*"
+        },
+        "pollInterval": {
+          "type": "number",
+          "default": 60,
+          "description": "Poll interval in seconds"
+        }
+      }
+    },
+    "JdbcTrigger": {
+      "type": "object",
+      "required": ["type", "url", "username", "password", "query", "driver"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "jdbc"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "pollInterval": {
+          "type": "number",
+          "default": 60,
+          "description": "Poll interval in seconds"
+        },
+        "driver": {
+          "type": "string"
+        }
+      }
+    },
+    "FileWatchTrigger": {
+      "type": "object",
+      "required": ["type", "path"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "file-watch"
+        },
+        "path": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string",
+          "default": "*"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["create", "modify", "delete"]
+          },
+          "default": ["create"]
+        },
+        "recursive": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "FlowStep": {
+      "type": "object",
+      "required": ["id", "name", "step"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique step identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Step name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Step description"
+        },
+        "step": {
+          "$ref": "#/definitions/Step"
+        },
+        "transport": {
+          "$ref": "#/definitions/Transport"
+        },
+        "policies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Policy"
+          }
+        },
+        "next": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Next step IDs"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error step ID"
+        }
+      }
+    },
+    "Step": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ConnectorStep"
+        },
+        {
+          "$ref": "#/definitions/MapStep"
+        },
+        {
+          "$ref": "#/definitions/ScriptStep"
+        },
+        {
+          "$ref": "#/definitions/EnrichStep"
+        },
+        {
+          "$ref": "#/definitions/BranchStep"
+        },
+        {
+          "$ref": "#/definitions/RetryStep"
+        },
+        {
+          "$ref": "#/definitions/DlqStep"
+        },
+        {
+          "$ref": "#/definitions/ThrottleStep"
+        },
+        {
+          "$ref": "#/definitions/CheckpointStep"
+        },
+        {
+          "$ref": "#/definitions/CircuitBreakerStep"
+        }
+      ]
+    },
+    "ConnectorStep": {
+      "type": "object",
+      "required": ["type", "connectorRef", "operation"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "connector"
+        },
+        "connectorRef": {
+          "type": "string",
+          "description": "Connector reference"
+        },
+        "operation": {
+          "type": "string",
+          "description": "Operation to perform"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "timeout": {
+          "type": "number",
+          "description": "Timeout in seconds"
+        },
+        "retry": {
+          "$ref": "#/definitions/RetryConfig"
+        }
+      }
+    },
+    "MapStep": {
+      "type": "object",
+      "required": ["type", "expression"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "map"
+        },
+        "expression": {
+          "type": "string",
+          "description": "JSONata expression"
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "outputFormat": {
+          "type": "string",
+          "enum": ["json", "xml", "csv"],
+          "default": "json"
+        }
+      }
+    },
+    "ScriptStep": {
+      "type": "object",
+      "required": ["type", "language", "code"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "script"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["javascript", "python"]
+        },
+        "code": {
+          "type": "string",
+          "description": "Script code"
+        },
+        "timeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Timeout in seconds"
+        },
+        "sandbox": {
+          "type": "boolean",
+          "default": true
+        },
+        "imports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "EnrichStep": {
+      "type": "object",
+      "required": ["type", "source", "key"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "enrich"
+        },
+        "source": {
+          "type": "string",
+          "description": "Source connector or URL"
+        },
+        "key": {
+          "type": "string",
+          "description": "Field to match on"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Fields to include"
+        },
+        "timeout": {
+          "type": "number",
+          "default": 10,
+          "description": "Timeout in seconds"
+        }
+      }
+    },
+    "BranchStep": {
+      "type": "object",
+      "required": ["type", "conditions"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "branch"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["condition", "nextStep"],
+            "properties": {
+              "condition": {
+                "type": "string",
+                "description": "JSONata expression"
+              },
+              "nextStep": {
+                "type": "string",
+                "description": "Next step ID"
+              }
+            }
+          }
+        },
+        "default": {
+          "type": "string",
+          "description": "Default next step ID"
+        }
+      }
+    },
+    "RetryStep": {
+      "type": "object",
+      "required": ["type", "maxAttempts", "backoff"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "retry"
+        },
+        "maxAttempts": {
+          "type": "number",
+          "default": 3
+        },
+        "backoff": {
+          "$ref": "#/definitions/BackoffConfig"
+        },
+        "retryOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["*"],
+          "description": "Error patterns to retry on"
+        }
+      }
+    },
+    "DlqStep": {
+      "type": "object",
+      "required": ["type", "reason"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "dlq"
+        },
+        "reason": {
+          "type": "string",
+          "description": "DLQ reason"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ThrottleStep": {
+      "type": "object",
+      "required": ["type", "rate"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "throttle"
+        },
+        "rate": {
+          "type": "number",
+          "description": "Requests per second"
+        },
+        "burst": {
+          "type": "number",
+          "description": "Burst capacity"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["token-bucket", "leaky-bucket", "fixed-window"],
+          "default": "token-bucket"
+        }
+      }
+    },
+    "CheckpointStep": {
+      "type": "object",
+      "required": ["type", "name"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "checkpoint"
+        },
+        "name": {
+          "type": "string",
+          "description": "Checkpoint name"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "CircuitBreakerStep": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "circuitBreaker"
+        },
+        "failureThreshold": {
+          "type": "number",
+          "default": 5
+        },
+        "recoveryTimeout": {
+          "type": "number",
+          "default": 60,
+          "description": "Recovery timeout in seconds"
+        },
+        "halfOpenMaxCalls": {
+          "type": "number",
+          "default": 3
+        },
+        "monitorInterval": {
+          "type": "number",
+          "default": 10,
+          "description": "Monitor interval in seconds"
+        }
+      }
+    },
+    "Transport": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/RestTransport"
+        },
+        {
+          "$ref": "#/definitions/SoapTransport"
+        },
+        {
+          "$ref": "#/definitions/GraphqlTransport"
+        },
+        {
+          "$ref": "#/definitions/JdbcTransport"
+        },
+        {
+          "$ref": "#/definitions/KafkaTransport"
+        },
+        {
+          "$ref": "#/definitions/MqttTransport"
+        },
+        {
+          "$ref": "#/definitions/SftpTransport"
+        },
+        {
+          "$ref": "#/definitions/FsTransport"
+        },
+        {
+          "$ref": "#/definitions/CustomTransport"
+        }
+      ]
+    },
+    "RestTransport": {
+      "type": "object",
+      "required": ["type", "method", "url"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "rest"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"]
+        },
+        "url": {
+          "type": "string"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Timeout in seconds"
+        },
+        "retry": {
+          "$ref": "#/definitions/RetryConfig"
+        }
+      }
+    },
+    "SoapTransport": {
+      "type": "object",
+      "required": ["type", "url", "action", "envelope"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "soap"
+        },
+        "url": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "envelope": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Timeout in seconds"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "GraphqlTransport": {
+      "type": "object",
+      "required": ["type", "url", "query"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "graphql"
+        },
+        "url": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Timeout in seconds"
+        }
+      }
+    },
+    "JdbcTransport": {
+      "type": "object",
+      "required": ["type", "url", "username", "password", "query"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "jdbc"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "timeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Timeout in seconds"
+        },
+        "connectionPool": {
+          "type": "object",
+          "properties": {
+            "min": {
+              "type": "number",
+              "default": 1
+            },
+            "max": {
+              "type": "number",
+              "default": 10
+            }
+          }
+        }
+      }
+    },
+    "KafkaTransport": {
+      "type": "object",
+      "required": ["type", "topic", "bootstrapServers"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "kafka"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "bootstrapServers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "keySerializer": {
+          "type": "string",
+          "default": "org.apache.kafka.common.serialization.StringSerializer"
+        },
+        "valueSerializer": {
+          "type": "string",
+          "default": "org.apache.kafka.common.serialization.StringSerializer"
+        },
+        "acks": {
+          "type": "string",
+          "enum": ["0", "1", "all"],
+          "default": "1"
+        },
+        "retries": {
+          "type": "number",
+          "default": 3
+        }
+      }
+    },
+    "MqttTransport": {
+      "type": "object",
+      "required": ["type", "topic", "broker", "clientId"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "mqtt"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "qos": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "broker": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "retain": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "SftpTransport": {
+      "type": "object",
+      "required": ["type", "host", "username", "path", "mode"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "sftp"
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "number",
+          "default": 22
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "privateKey": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["upload", "download"]
+        }
+      }
+    },
+    "FsTransport": {
+      "type": "object",
+      "required": ["type", "path", "mode"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "fs"
+        },
+        "path": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["read", "write", "append"]
+        },
+        "encoding": {
+          "type": "string",
+          "default": "utf8"
+        },
+        "createDir": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "CustomTransport": {
+      "type": "object",
+      "required": ["type", "name", "config"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "custom"
+        },
+        "name": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Policy": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/QosPolicy"
+        },
+        {
+          "$ref": "#/definitions/IdempotencyPolicy"
+        },
+        {
+          "$ref": "#/definitions/MtlsPolicy"
+        },
+        {
+          "$ref": "#/definitions/OpaPolicy"
+        },
+        {
+          "$ref": "#/definitions/SecretsPolicy"
+        }
+      ]
+    },
+    "QosPolicy": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "qos"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "normal", "high", "critical"],
+          "default": "normal"
+        },
+        "timeout": {
+          "type": "number",
+          "description": "Timeout in seconds"
+        },
+        "retry": {
+          "$ref": "#/definitions/RetryConfig"
+        }
+      }
+    },
+    "IdempotencyPolicy": {
+      "type": "object",
+      "required": ["type", "key"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "idempotency"
+        },
+        "key": {
+          "type": "string",
+          "description": "JSONata expression to generate idempotency key"
+        },
+        "ttl": {
+          "type": "number",
+          "default": 3600,
+          "description": "TTL in seconds"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["cache", "database"],
+          "default": "cache"
+        }
+      }
+    },
+    "MtlsPolicy": {
+      "type": "object",
+      "required": ["type", "certPath", "keyPath"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "mtls"
+        },
+        "certPath": {
+          "type": "string"
+        },
+        "keyPath": {
+          "type": "string"
+        },
+        "caPath": {
+          "type": "string"
+        },
+        "verify": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "OpaPolicy": {
+      "type": "object",
+      "required": ["type", "policyRef"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "opa"
+        },
+        "policyRef": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "SecretsPolicy": {
+      "type": "object",
+      "required": ["type", "vaultPaths"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "secrets"
+        },
+        "vaultPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "refreshInterval": {
+          "type": "number",
+          "default": 300,
+          "description": "Refresh interval in seconds"
+        }
+      }
+    },
+    "Observability": {
+      "type": "object",
+      "properties": {
+        "traceId": {
+          "$ref": "#/definitions/TraceConfig"
+        },
+        "sampleRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1.0
+        },
+        "payloadSampling": {
+          "$ref": "#/definitions/PayloadSampling"
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "interval": {
+              "type": "number",
+              "default": 60,
+              "description": "Interval in seconds"
+            }
+          }
+        },
+        "logs": {
+          "type": "object",
+          "properties": {
+            "level": {
+              "type": "string",
+              "enum": ["debug", "info", "warn", "error"],
+              "default": "info"
+            },
+            "structured": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "TraceConfig": {
+      "type": "object",
+      "properties": {
+        "propagation": {
+          "type": "string",
+          "enum": ["w3c", "b3", "jaeger"],
+          "default": "w3c"
+        },
+        "sampling": {
+          "type": "object",
+          "properties": {
+            "rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 1.0
+            },
+            "strategy": {
+              "type": "string",
+              "enum": ["always", "probabilistic", "rate-limiting"],
+              "default": "always"
+            }
+          }
+        }
+      }
+    },
+    "PayloadSampling": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.1
+        },
+        "maxSize": {
+          "type": "number",
+          "default": 1024,
+          "description": "Maximum size in bytes"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Specific fields to sample"
+        }
+      }
+    },
+    "RetryConfig": {
+      "type": "object",
+      "properties": {
+        "attempts": {
+          "type": "number",
+          "default": 3
+        },
+        "backoff": {
+          "$ref": "#/definitions/BackoffConfig"
+        }
+      }
+    },
+    "BackoffConfig": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["fixed", "exponential", "linear"],
+          "default": "exponential"
+        },
+        "initialDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Initial delay in milliseconds"
+        },
+        "maxDelay": {
+          "type": "number",
+          "default": 30000,
+          "description": "Maximum delay in milliseconds"
+        },
+        "multiplier": {
+          "type": "number",
+          "default": 2
+        }
+      }
+    }
+  }
+}

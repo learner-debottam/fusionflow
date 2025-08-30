@@ -1,0 +1,308 @@
+metadata:
+  name: "IoT Data Processing Flow"
+  version: "1.0.0"
+  description: "Process IoT sensor data from MQTT, apply real-time analytics, and store results"
+
+triggers:
+  - type: mqtt
+    topic: "sensors/+/data"
+    qos: 1
+    broker: "mqtt.broker.com"
+    clientId: "fusionflow-iot-processor"
+    username: "${env.MQTT_USERNAME}"
+    password: "${env.MQTT_PASSWORD}"
+
+steps:
+  - id: "receive-sensor-data"
+    name: "Receive Sensor Data"
+    description: "Receive sensor data from MQTT"
+    step:
+      type: connector
+      connectorRef: "mqtt-connector"
+      operation: "subscribe"
+      config:
+        topic: "sensors/+/data"
+        qos: 1
+      timeout: 10
+    transport:
+      type: mqtt
+      topic: "sensors/+/data"
+      qos: 1
+      broker: "mqtt.broker.com"
+      clientId: "fusionflow-iot-processor"
+      username: "${env.MQTT_USERNAME}"
+      password: "${env.MQTT_PASSWORD}"
+      retain: false
+    next: ["parse-sensor-data"]
+    error: "error-handler"
+
+  - id: "parse-sensor-data"
+    name: "Parse Sensor Data"
+    description: "Parse and validate sensor data"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const rawData = payload.body;
+        
+        // Parse JSON data
+        let sensorData;
+        try {
+          sensorData = JSON.parse(rawData);
+        } catch (error) {
+          throw new Error('Invalid JSON data received');
+        }
+        
+        // Validate required fields
+        if (!sensorData.sensorId || !sensorData.timestamp || !sensorData.value) {
+          throw new Error('Missing required sensor data fields');
+        }
+        
+        // Add metadata
+        sensorData.receivedAt = new Date().toISOString();
+        sensorData.source = 'mqtt';
+        sensorData.topic = payload.meta.topic;
+        
+        payload.body = sensorData;
+        return payload;
+      timeout: 5
+      sandbox: true
+    next: ["apply-threshold-check"]
+    error: "error-handler"
+
+  - id: "apply-threshold-check"
+    name: "Apply Threshold Check"
+    description: "Check if sensor values exceed thresholds"
+    step:
+      type: branch
+      conditions:
+        - condition: "$.value > 100"
+          nextStep: "high-value-alert"
+        - condition: "$.value < 0"
+          nextStep: "low-value-alert"
+      default: "normal-processing"
+
+  - id: "high-value-alert"
+    name: "High Value Alert"
+    description: "Handle high sensor values"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        
+        // Create alert
+        const alert = {
+          type: 'HIGH_VALUE_ALERT',
+          sensorId: data.sensorId,
+          value: data.value,
+          threshold: 100,
+          timestamp: data.timestamp,
+          severity: 'warning'
+        };
+        
+        // Send alert to notification system
+        payload.body = alert;
+        payload.meta.alert = true;
+        
+        return payload;
+      timeout: 5
+      sandbox: true
+    next: ["send-alert"]
+    error: "error-handler"
+
+  - id: "low-value-alert"
+    name: "Low Value Alert"
+    description: "Handle low sensor values"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        
+        // Create alert
+        const alert = {
+          type: 'LOW_VALUE_ALERT',
+          sensorId: data.sensorId,
+          value: data.value,
+          threshold: 0,
+          timestamp: data.timestamp,
+          severity: 'error'
+        };
+        
+        // Send alert to notification system
+        payload.body = alert;
+        payload.meta.alert = true;
+        
+        return payload;
+      timeout: 5
+      sandbox: true
+    next: ["send-alert"]
+    error: "error-handler"
+
+  - id: "normal-processing"
+    name: "Normal Processing"
+    description: "Process normal sensor values"
+    step:
+      type: map
+      expression: |
+        {
+          "sensor_id": $.sensorId,
+          "value": $.value,
+          "timestamp": $.timestamp,
+          "received_at": $.receivedAt,
+          "status": "normal",
+          "processed": true
+        }
+      outputFormat: json
+    next: ["store-sensor-data"]
+    error: "error-handler"
+
+  - id: "send-alert"
+    name: "Send Alert"
+    description: "Send alert to notification system"
+    step:
+      type: connector
+      connectorRef: "notification-connector"
+      operation: "send"
+      config:
+        channel: "slack"
+        message: "Sensor Alert: ${payload.body.type} - Sensor ${payload.body.sensorId} value: ${payload.body.value}"
+        severity: "${payload.body.severity}"
+      timeout: 10
+    transport:
+      type: rest
+      method: POST
+      url: "https://hooks.slack.com/services/${env.SLACK_WEBHOOK}"
+      headers:
+        Content-Type: "application/json"
+      timeout: 10
+    policies:
+      - type: qos
+        priority: high
+        timeout: 10
+    next: ["store-alert"]
+    error: "error-handler"
+
+  - id: "store-alert"
+    name: "Store Alert"
+    description: "Store alert in database"
+    step:
+      type: connector
+      connectorRef: "postgres-connector"
+      operation: "insert"
+      config:
+        table: "sensor_alerts"
+        data: "${payload.body}"
+      timeout: 30
+    transport:
+      type: jdbc
+      url: "jdbc:postgresql://${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}"
+      username: "${env.DB_USER}"
+      password: "${env.DB_PASSWORD}"
+      query: "INSERT INTO sensor_alerts (type, sensor_id, value, threshold, timestamp, severity) VALUES (?, ?, ?, ?, ?, ?)"
+      timeout: 30
+    policies:
+      - type: qos
+        priority: high
+        timeout: 30
+    next: ["store-sensor-data"]
+    error: "error-handler"
+
+  - id: "store-sensor-data"
+    name: "Store Sensor Data"
+    description: "Store sensor data in time-series database"
+    step:
+      type: connector
+      connectorRef: "influxdb-connector"
+      operation: "write"
+      config:
+        database: "iot_metrics"
+        measurement: "sensor_data"
+        tags:
+          sensor_id: "${payload.body.sensor_id}"
+          status: "${payload.body.status}"
+        fields:
+          value: "${payload.body.value}"
+        timestamp: "${payload.body.timestamp}"
+      timeout: 30
+    transport:
+      type: rest
+      method: POST
+      url: "http://${env.INFLUXDB_HOST}:${env.INFLUXDB_PORT}/write?db=iot_metrics"
+      headers:
+        Authorization: "Token ${env.INFLUXDB_TOKEN}"
+        Content-Type: "application/octet-stream"
+      timeout: 30
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 30
+      - type: idempotency
+        key: "${payload.body.sensor_id}_${payload.body.timestamp}"
+        ttl: 3600
+        strategy: cache
+    next: ["publish-to-kafka"]
+    error: "error-handler"
+
+  - id: "publish-to-kafka"
+    name: "Publish to Kafka"
+    description: "Publish processed data to Kafka for downstream processing"
+    step:
+      type: connector
+      connectorRef: "kafka-connector"
+      operation: "publish"
+      config:
+        topic: "iot-processed-data"
+        key: "${payload.body.sensor_id}"
+        partition: 0
+      timeout: 10
+    transport:
+      type: kafka
+      topic: "iot-processed-data"
+      bootstrapServers:
+        - "kafka-1.iot.com:9092"
+        - "kafka-2.iot.com:9092"
+      keySerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      valueSerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      acks: "1"
+      retries: 3
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 10
+    next: ["complete"]
+    error: "error-handler"
+
+  - id: "complete"
+    name: "Complete"
+    description: "Mark processing as complete"
+    step:
+      type: checkpoint
+      name: "iot-processing-complete"
+      data:
+        timestamp: "${now()}"
+        status: "completed"
+        sensor_id: "${payload.body.sensor_id}"
+    next: []
+
+  - id: "error-handler"
+    name: "Error Handler"
+    description: "Handle processing errors"
+    step:
+      type: dlq
+      reason: "IoT data processing error"
+      metadata:
+        flow_id: "${flow.id}"
+        error_timestamp: "${now()}"
+        sensor_id: "${payload.body.sensorId || 'unknown'}"
+    transport:
+      type: kafka
+      topic: "iot-processing-dlq"
+      bootstrapServers:
+        - "kafka-1.iot.com:9092"
+        - "kafka-2.iot.com:9092"
+      keySerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      valueSerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      acks: "1"
+      retries: 3

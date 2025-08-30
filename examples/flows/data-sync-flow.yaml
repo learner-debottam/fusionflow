@@ -1,0 +1,556 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+metadata:
+  name: "Data Synchronization Flow"
+  version: "1.0.0"
+  description: "Synchronizes data from multiple sources to a centralized data warehouse with compliance and observability"
+  tenant: "acme-corp"
+  tags:
+    - "data-sync"
+    - "etl"
+    - "compliance"
+    - "production"
+  owners:
+    - name: "Data Engineering Team"
+      email: "data-eng@acme.com"
+      team: "Data Engineering"
+      role: "Primary Owner"
+    - name: "DevOps Team"
+      email: "devops@acme.com"
+      team: "DevOps"
+      role: "Infrastructure Support"
+  compliance:
+    gdpr: true
+    hipaa: false
+    soc2: true
+    pci: false
+    dataRetention: 2555
+    dataClassification: "confidential"
+  rbac:
+    roles:
+      - "data-engineer"
+      - "data-analyst"
+      - "devops-engineer"
+    permissions:
+      - "read"
+      - "write"
+      - "execute"
+    tenants:
+      - "acme-corp"
+  createdAt: "2024-01-15T10:00:00Z"
+  updatedAt: "2024-01-15T10:00:00Z"
+  createdBy: "data-eng@acme.com"
+  updatedBy: "data-eng@acme.com"
+
+triggers:
+  - type: schedule
+    cron: "0 2 * * *"
+    timezone: "UTC"
+    startDate: "2024-01-15T02:00:00Z"
+  - type: http
+    method: POST
+    path: "/api/v1/sync/trigger"
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer ${env.API_TOKEN}"
+    auth:
+      type: bearer
+      config:
+        token: "${env.API_TOKEN}"
+    rateLimit:
+      requests: 10
+      window: 60
+
+steps:
+  - id: "start"
+    name: "Flow Start"
+    description: "Initialize flow execution and validate input"
+    step:
+      type: checkpoint
+      name: "flow-start"
+      data:
+        timestamp: "${now()}"
+        flowId: "${flow.id}"
+        executionId: "${execution.id}"
+    next: ["validate-input"]
+    error: "error-handler"
+
+  - id: "validate-input"
+    name: "Validate Input"
+    description: "Validate input data and check compliance requirements"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const input = payload.body;
+        
+        // Validate required fields
+        if (!input.source || !input.target) {
+          throw new Error('Source and target are required');
+        }
+        
+        // Check compliance requirements
+        if (input.dataType === 'pii' && !input.consent) {
+          throw new Error('Consent required for PII data processing');
+        }
+        
+        // Add validation metadata
+        payload.meta.validation = {
+          timestamp: new Date().toISOString(),
+          valid: true,
+          checks: ['required_fields', 'compliance', 'data_types']
+        };
+        
+        return payload;
+      timeout: 30
+      sandbox: true
+    policies:
+      - type: qos
+        priority: high
+        timeout: 30
+    next: ["extract-data"]
+    error: "error-handler"
+
+  - id: "extract-data"
+    name: "Extract Data from Source"
+    description: "Extract data from the specified source system"
+    step:
+      type: connector
+      connectorRef: "postgres-connector"
+      operation: "query"
+      config:
+        query: "SELECT * FROM ${payload.body.source.table} WHERE updated_at > '${payload.body.lastSync}'"
+        batchSize: 1000
+      timeout: 300
+      retry:
+        attempts: 3
+        backoff:
+          type: exponential
+          initialDelay: 1000
+          maxDelay: 30000
+          multiplier: 2
+    transport:
+      type: jdbc
+      url: "jdbc:postgresql://${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}"
+      username: "${env.DB_USER}"
+      password: "${env.DB_PASSWORD}"
+      query: "SELECT * FROM ${payload.body.source.table} WHERE updated_at > '${payload.body.lastSync}'"
+      timeout: 300
+      connectionPool:
+        min: 2
+        max: 10
+    policies:
+      - type: qos
+        priority: high
+        timeout: 300
+      - type: idempotency
+        key: "${payload.body.source.table}_${payload.body.lastSync}"
+        ttl: 3600
+        strategy: cache
+    next: ["transform-data"]
+    error: "error-handler"
+
+  - id: "transform-data"
+    name: "Transform Data"
+    description: "Transform extracted data using JSONata expressions"
+    step:
+      type: map
+      expression: |
+        {
+          "id": $.id,
+          "name": $.name,
+          "email": $.email,
+          "department": $.dept,
+          "salary": $.salary,
+          "last_updated": $.updated_at,
+          "sync_timestamp": now(),
+          "data_source": $.source_system,
+          "compliance_flags": {
+            "gdpr_compliant": $.consent_given,
+            "data_retention": $.retention_date,
+            "classification": $.data_classification
+          }
+        }
+      variables:
+        now: "${new Date().toISOString()}"
+      outputFormat: json
+    next: ["enrich-data"]
+    error: "error-handler"
+
+  - id: "enrich-data"
+    name: "Enrich Data"
+    description: "Enrich data with additional information from reference systems"
+    step:
+      type: enrich
+      source: "department-lookup"
+      key: "department"
+      fields:
+        - "department_name"
+        - "department_code"
+        - "manager_id"
+        - "cost_center"
+      timeout: 60
+    transport:
+      type: rest
+      method: GET
+      url: "https://api.acme.com/departments/${payload.body.department}"
+      headers:
+        Authorization: "Bearer ${env.API_TOKEN}"
+        Accept: "application/json"
+      timeout: 60
+      retry:
+        attempts: 3
+        backoff:
+          type: exponential
+          initialDelay: 1000
+          maxDelay: 10000
+          multiplier: 2
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 60
+    next: ["validate-transformed-data"]
+    error: "error-handler"
+
+  - id: "validate-transformed-data"
+    name: "Validate Transformed Data"
+    description: "Validate transformed data against business rules"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        const errors = [];
+        
+        // Business rule validations
+        if (data.salary && data.salary < 0) {
+          errors.push('Salary cannot be negative');
+        }
+        
+        if (data.email && !data.email.includes('@')) {
+          errors.push('Invalid email format');
+        }
+        
+        if (data.department && !data.department_code) {
+          errors.push('Department code is required');
+        }
+        
+        if (errors.length > 0) {
+          throw new Error(`Validation failed: ${errors.join(', ')}`);
+        }
+        
+        // Add validation metadata
+        payload.meta.validation = {
+          timestamp: new Date().toISOString(),
+          valid: true,
+          checks: ['business_rules', 'data_format', 'completeness']
+        };
+        
+        return payload;
+      timeout: 30
+      sandbox: true
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 30
+    next: ["branch-processing"]
+    error: "error-handler"
+
+  - id: "branch-processing"
+    name: "Branch Processing"
+    description: "Route data to different processing paths based on conditions"
+    step:
+      type: branch
+      conditions:
+        - condition: "$.compliance_flags.gdpr_compliant = true and $.data_classification = 'confidential'"
+          nextStep: "encrypt-data"
+        - condition: "$.salary > 100000"
+          nextStep: "high-value-processing"
+        - condition: "$.department_code = 'IT'"
+          nextStep: "it-specific-processing"
+      default: "standard-processing"
+
+  - id: "encrypt-data"
+    name: "Encrypt Sensitive Data"
+    description: "Encrypt sensitive data for GDPR compliance"
+    step:
+      type: connector
+      connectorRef: "encryption-connector"
+      operation: "encrypt"
+      config:
+        algorithm: "AES-256-GCM"
+        fields:
+          - "email"
+          - "salary"
+          - "personal_info"
+      timeout: 60
+    policies:
+      - type: qos
+        priority: high
+        timeout: 60
+      - type: secrets
+        vaultPaths:
+          - "secret/encryption/keys"
+          - "secret/encryption/certificates"
+        refreshInterval: 300
+    next: ["load-data"]
+    error: "error-handler"
+
+  - id: "high-value-processing"
+    name: "High Value Processing"
+    description: "Special processing for high-value records"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        
+        // Add high-value flags
+        data.high_value = true;
+        data.audit_required = true;
+        data.approval_level = 'senior_management';
+        
+        // Log for audit
+        console.log(`High value record processed: ${data.id}, Salary: ${data.salary}`);
+        
+        return payload;
+      timeout: 30
+      sandbox: true
+    policies:
+      - type: qos
+        priority: high
+        timeout: 30
+    next: ["load-data"]
+    error: "error-handler"
+
+  - id: "it-specific-processing"
+    name: "IT Department Processing"
+    description: "Special processing for IT department records"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        
+        // Add IT-specific fields
+        data.access_level = 'admin';
+        data.security_clearance = 'high';
+        data.system_access = ['prod', 'staging', 'dev'];
+        
+        return payload;
+      timeout: 30
+      sandbox: true
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 30
+    next: ["load-data"]
+    error: "error-handler"
+
+  - id: "standard-processing"
+    name: "Standard Processing"
+    description: "Standard processing for regular records"
+    step:
+      type: script
+      language: javascript
+      code: |
+        const data = payload.body;
+        
+        // Add standard processing flags
+        data.processed = true;
+        data.processing_type = 'standard';
+        
+        return payload;
+      timeout: 30
+      sandbox: true
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 30
+    next: ["throttle-loading"]
+    error: "error-handler"
+
+  - id: "throttle-loading"
+    name: "Throttle Data Loading"
+    description: "Throttle data loading to prevent overwhelming the target system"
+    step:
+      type: throttle
+      rate: 100
+      burst: 200
+      strategy: token-bucket
+    next: ["load-data"]
+    error: "error-handler"
+
+  - id: "load-data"
+    name: "Load Data to Target"
+    description: "Load transformed data to the target data warehouse"
+    step:
+      type: connector
+      connectorRef: "snowflake-connector"
+      operation: "insert"
+      config:
+        table: "${payload.body.target.table}"
+        batchSize: 500
+        upsert: true
+        conflictColumns:
+          - "id"
+      timeout: 600
+      retry:
+        attempts: 5
+        backoff:
+          type: exponential
+          initialDelay: 2000
+          maxDelay: 60000
+          multiplier: 2
+    transport:
+      type: jdbc
+      url: "jdbc:snowflake://${env.SNOWFLAKE_ACCOUNT}.snowflakecomputing.com/${env.SNOWFLAKE_DB}"
+      username: "${env.SNOWFLAKE_USER}"
+      password: "${env.SNOWFLAKE_PASSWORD}"
+      query: "INSERT INTO ${payload.body.target.table} (id, name, email, department, salary, last_updated, sync_timestamp, data_source, compliance_flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      timeout: 600
+      connectionPool:
+        min: 5
+        max: 20
+    policies:
+      - type: qos
+        priority: high
+        timeout: 600
+      - type: idempotency
+        key: "${payload.body.target.table}_${payload.body.id}_${payload.body.sync_timestamp}"
+        ttl: 7200
+        strategy: database
+      - type: circuitBreaker
+        failureThreshold: 5
+        recoveryTimeout: 120
+        halfOpenMaxCalls: 3
+        monitorInterval: 30
+    next: ["publish-events"]
+    error: "error-handler"
+
+  - id: "publish-events"
+    name: "Publish Events"
+    description: "Publish events to Kafka for downstream processing"
+    step:
+      type: connector
+      connectorRef: "kafka-connector"
+      operation: "publish"
+      config:
+        topic: "data-sync-events"
+        key: "${payload.body.id}"
+        partition: 0
+      timeout: 30
+      retry:
+        attempts: 3
+        backoff:
+          type: exponential
+          initialDelay: 1000
+          maxDelay: 10000
+          multiplier: 2
+    transport:
+      type: kafka
+      topic: "data-sync-events"
+      bootstrapServers:
+        - "kafka-1.acme.com:9092"
+        - "kafka-2.acme.com:9092"
+        - "kafka-3.acme.com:9092"
+      keySerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      valueSerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      acks: "all"
+      retries: 3
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 30
+    next: ["update-sync-status"]
+    error: "error-handler"
+
+  - id: "update-sync-status"
+    name: "Update Sync Status"
+    description: "Update synchronization status in the tracking system"
+    step:
+      type: connector
+      connectorRef: "redis-connector"
+      operation: "set"
+      config:
+        key: "sync:${payload.body.source.table}:${payload.body.lastSync}"
+        value: "completed"
+        ttl: 86400
+      timeout: 10
+    transport:
+      type: rest
+      method: PUT
+      url: "https://api.acme.com/sync/status/${payload.body.source.table}"
+      headers:
+        Authorization: "Bearer ${env.API_TOKEN}"
+        Content-Type: "application/json"
+      timeout: 10
+    policies:
+      - type: qos
+        priority: normal
+        timeout: 10
+    next: ["flow-complete"]
+    error: "error-handler"
+
+  - id: "flow-complete"
+    name: "Flow Complete"
+    description: "Mark flow execution as complete"
+    step:
+      type: checkpoint
+      name: "flow-complete"
+      data:
+        timestamp: "${now()}"
+        status: "completed"
+        records_processed: "${payload.meta.records_processed || 0}"
+        duration: "${execution.duration}"
+    next: []
+
+  - id: "error-handler"
+    name: "Error Handler"
+    description: "Handle errors and send to DLQ"
+    step:
+      type: dlq
+      reason: "Data sync flow error"
+      metadata:
+        flow_id: "${flow.id}"
+        execution_id: "${execution.id}"
+        error_timestamp: "${now()}"
+        error_step: "${execution.currentStep}"
+    transport:
+      type: kafka
+      topic: "data-sync-dlq"
+      bootstrapServers:
+        - "kafka-1.acme.com:9092"
+        - "kafka-2.acme.com:9092"
+        - "kafka-3.acme.com:9092"
+      keySerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      valueSerializer: "org.apache.kafka.common.serialization.StringSerializer"
+      acks: "1"
+      retries: 3
+    policies:
+      - type: qos
+        priority: high
+        timeout: 30
+
+observability:
+  traceId:
+    propagation: w3c
+    sampling:
+      rate: 1.0
+      strategy: always
+  sampleRate: 1.0
+  payloadSampling:
+    enabled: true
+    rate: 0.1
+    maxSize: 2048
+    fields:
+      - "id"
+      - "name"
+      - "email"
+      - "department"
+      - "salary"
+  metrics:
+    enabled: true
+    interval: 60
+  logs:
+    level: info
+    structured: true
